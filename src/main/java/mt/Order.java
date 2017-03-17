@@ -37,6 +37,8 @@ public class Order implements Serializable {
 	 */
 	private boolean  isBuyOrder;
 
+	/* Commit */
+	
 	/**
 	 * 
 	 */
