@@ -11,7 +11,7 @@ import mt.comm.ClientComm;
  *
  */
 
-//Commit 
+//Commit2
 
 public interface MicroTraderClient {
 	
