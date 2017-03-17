@@ -11,8 +11,10 @@ import mt.comm.ClientComm;
  *
  */
 
-public interface MicroTraderClient {
+//Commit 
 
+public interface MicroTraderClient {
+	
 	/**
 	 * Should create the user interface, use the {@link ClientComm} to establish
 	 * a connection to the server, send new {@link mt.Order}s to the server, and
