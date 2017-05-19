@@ -13,6 +13,11 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.lang.model.element.Element;
+import javax.swing.text.Document;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
 import mt.Order;
 import mt.comm.ServerComm;
 import mt.comm.ServerSideMessage;
@@ -51,6 +56,12 @@ public class MicroServer implements MicroTraderServer {
 	 * Orders that we must track in order to notify clients
 	 */
 	private Set<Order> updatedOrders;
+	
+	private DocumentBuilderFactory docFactory;
+	private DocumentBuilder docBuilder;
+	
+	private Document doc;
+	private Element rootElement;
 
 	/**
 	 * Order Server ID
