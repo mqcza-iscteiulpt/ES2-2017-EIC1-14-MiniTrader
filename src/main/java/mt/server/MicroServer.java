@@ -231,8 +231,9 @@ public class MicroServer implements MicroTraderServer {
 	 * 
 	 * @param msg
 	 *            the message sent by the client
+	 * @return 
 	 */
-	private void processNewOrder(ServerSideMessage msg) throws ServerException {
+	private String processNewOrder(ServerSideMessage msg) throws ServerException {
 		LOGGER.log(Level.INFO, "Processing new order...");
 
 		Order o = msg.getOrder();
@@ -258,6 +259,7 @@ public class MicroServer implements MicroTraderServer {
 
 		// reset the set of changed orders
 		updatedOrders = new HashSet<>();
+		return null;
 
 	}
 	
