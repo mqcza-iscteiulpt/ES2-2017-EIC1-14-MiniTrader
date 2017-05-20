@@ -1,5 +1,6 @@
 package mt.server;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -12,6 +13,20 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 import mt.Order;
 import mt.comm.ServerComm;
@@ -52,6 +67,14 @@ public class MicroServer implements MicroTraderServer {
 	 */
 	private Set<Order> updatedOrders;
 
+	private DocumentBuilderFactory docFactory;
+
+	private DocumentBuilder docBuilder;
+
+	private Document doc;
+
+	private Element rootElement;
+
 	/**
 	 * Order Server ID
 	 */
@@ -68,10 +91,77 @@ public class MicroServer implements MicroTraderServer {
 		orderMap = new HashMap<String, Set<Order>>();
 		updatedOrders = new HashSet<>();
 	}
+	
+	//XML START
+		private static String workingDir = System.getProperty("user.dir");
+		private static final String FILENAME = workingDir+"\\persistency.xml";
+		
+		private void printMessageToLog(ServerSideMessage msg){
+			Order o = msg.getOrder();
+			
+			//order elements
+			Element order = doc.createElement("Order");
+			rootElement.appendChild(order);
+			
+			Attr at = doc.createAttribute("id");
+			String id = String.valueOf(o.getServerOrderID());
+			at.setValue(id);
+			order.setAttributeNode(at);
+			
+			if (o.isBuyOrder())
+				order.setAttribute("Type", "Buy");
+			else
+				order.setAttribute("Type", "Sell");
+			
+			order.setAttribute("Stock", o.getStock());
+			order.setAttribute("Units", String.valueOf(o.getNumberOfUnits()));
+			order.setAttribute("Price", String.valueOf(o.getPricePerUnit()));
+			
+			
+			TransformerFactory transformerFactory =
+					TransformerFactory.newInstance();
+			try {
+				Transformer transformer = transformerFactory.newTransformer();
+				DOMSource source = new DOMSource(doc);
+				StreamResult res = new StreamResult(new File(FILENAME));
+				transformer.transform(source, res);
+			} catch (TransformerConfigurationException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (TransformerException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+			
+			
+			
+		}
+		//XML END
 
 	@Override
 	public void start(ServerComm serverComm) {
 		serverComm.start();
+		
+		//XML START
+		
+		docFactory = DocumentBuilderFactory.newInstance();
+		
+		try {
+			docBuilder = docFactory.newDocumentBuilder();
+		} catch (ParserConfigurationException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		
+		
+		//root
+		doc = docBuilder.newDocument();
+		rootElement = doc.createElement("XML");
+		doc.appendChild(rootElement);
+		
+		//XML END
+		
 		
 		LOGGER.log(Level.INFO, "Starting Server...");
 
@@ -103,8 +193,14 @@ public class MicroServer implements MicroTraderServer {
 						if(msg.getOrder().getServerOrderID() == EMPTY){
 							msg.getOrder().setServerOrderID(id++);
 						}
-						notifyAllClients(msg.getOrder());
-						processNewOrder(msg);
+						String result = processNewOrder(msg);
+						
+						if (result.equals(""))
+							notifyAllClients(msg.getOrder());
+						else{
+							serverComm.sendError(msg.getSenderNickname(), result);
+						}
+						
 					} catch (ServerException e) {
 						serverComm.sendError(msg.getSenderNickname(), e.getMessage());
 					}
@@ -214,24 +310,53 @@ public class MicroServer implements MicroTraderServer {
 	 * @param msg
 	 *            the message sent by the client
 	 */
-	private void processNewOrder(ServerSideMessage msg) throws ServerException {
+	private String processNewOrder(ServerSideMessage msg) throws ServerException {
 		LOGGER.log(Level.INFO, "Processing new order...");
 
 		Order o = msg.getOrder();
 		
-		// save the order on map
-		saveOrder(o);
-
-		// if is buy order
-		if (o.isBuyOrder()) {
-			processBuy(msg.getOrder());
-		}
+		//XML START
+		printMessageToLog(msg);
+		//XML END
 		
-		// if is sell order
-		if (o.isSellOrder()) {
-			processSell(msg.getOrder());
-		}
-		//comentario
+		// if is buy order
+				if (o.isBuyOrder()) {
+					
+					if (o.getNumberOfUnits() < 10){
+						return "Units must be greater than 10";
+					}
+					else{
+						saveOrder(o);
+						processBuy(msg.getOrder());
+					}
+				}
+				
+				// if is sell order
+				if (o.isSellOrder()) {
+					if (o.getNumberOfUnits() < 10) {
+						return "Units must be greater than 10";
+					} else {
+						Set<Order> s = orderMap.get(msg.getSenderNickname());
+						Iterator<Order> t = s.iterator();
+						int counter = 0;
+						while (t.hasNext()) {
+							Order order = (Order) t.next();
+							if (!order.isBuyOrder()) {
+								counter++;
+							}
+						}
+
+						if (counter < 5) {
+							System.out.println("Client has less than 5 sell orders, adding order.");
+							saveOrder(o);
+							processSell(msg.getOrder());
+						} else {
+							System.out.println("Client already has 5 unfulfilled sell orders");
+							return "You already have 5 unfulfilled sell orders";
+						}
+					}
+				}
+
 		// notify clients of changed order
 		notifyClientsOfChangedOrders();
 
@@ -240,6 +365,8 @@ public class MicroServer implements MicroTraderServer {
 
 		// reset the set of changed orders
 		updatedOrders = new HashSet<>();
+		
+		return "";
 
 	}
 	
@@ -294,6 +421,8 @@ public class MicroServer implements MicroTraderServer {
 		}
 
 	}
+	
+	
 
 	/**
 	 * Process the transaction between buyer and seller
