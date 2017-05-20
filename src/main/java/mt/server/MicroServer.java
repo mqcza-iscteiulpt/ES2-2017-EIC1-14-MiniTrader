@@ -1,5 +1,6 @@
 package mt.server;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -13,10 +14,19 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.lang.model.element.Element;
-import javax.swing.text.Document;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 import mt.Order;
 import mt.comm.ServerComm;
@@ -56,11 +66,13 @@ public class MicroServer implements MicroTraderServer {
 	 * Orders that we must track in order to notify clients
 	 */
 	private Set<Order> updatedOrders;
-	
+
 	private DocumentBuilderFactory docFactory;
+
 	private DocumentBuilder docBuilder;
-	
+
 	private Document doc;
+
 	private Element rootElement;
 
 	/**
@@ -79,10 +91,11 @@ public class MicroServer implements MicroTraderServer {
 		orderMap = new HashMap<String, Set<Order>>();
 		updatedOrders = new HashSet<>();
 	}
-
+	
 	@Override
 	public void start(ServerComm serverComm) {
 		serverComm.start();
+		
 		
 		LOGGER.log(Level.INFO, "Starting Server...");
 
@@ -114,15 +127,14 @@ public class MicroServer implements MicroTraderServer {
 						if(msg.getOrder().getServerOrderID() == EMPTY){
 							msg.getOrder().setServerOrderID(id++);
 						}
-					    String result = processNewOrder(msg);
-					      if (result.equals(""))
-						notifyAllClients(msg.getOrder());
-					      else{
-					    	  
-					    	serverComm.sendError(msg.getSenderNickname(), result);
-					     }
-					      
-					    //  processNewOrder(msg);
+						String result = processNewOrder(msg);
+						
+						if (result.equals(""))
+							notifyAllClients(msg.getOrder());
+						else{
+							serverComm.sendError(msg.getSenderNickname(), result);
+						}
+						
 					} catch (ServerException e) {
 						serverComm.sendError(msg.getSenderNickname(), e.getMessage());
 					}
@@ -231,25 +243,68 @@ public class MicroServer implements MicroTraderServer {
 	 * 
 	 * @param msg
 	 *            the message sent by the client
-	 * @return 
 	 */
 	private String processNewOrder(ServerSideMessage msg) throws ServerException {
 		LOGGER.log(Level.INFO, "Processing new order...");
 
 		Order o = msg.getOrder();
 		
-		// save the order on map
-		saveOrder(o);
-
+		
 		// if is buy order
 		if (o.isBuyOrder()) {
-			processBuy(msg.getOrder());
+			
+			if (o.getNumberOfUnits() < 10){
+				return "Units must be greater than 10";
+			}
+			else{
+				Set<Order> s = orderMap.get(msg.getSenderNickname());
+				Iterator<Order> t = s.iterator();
+				while (t.hasNext()) {
+					Order order = (Order) t.next();
+					if (!order.isBuyOrder()) {
+						if (o.getNickname().equals(order.getNickname()) && o.getStock().equals(order.getStock())){
+							return "Cannot issue buy order to your own sell order!";
+						}
+						
+					}
+				}
+				saveOrder(o);
+				processBuy(msg.getOrder());
+			}
 		}
 		
 		// if is sell order
 		if (o.isSellOrder()) {
-			processSell(msg.getOrder());
+			if (o.getNumberOfUnits() < 10) {
+				return "Units must be greater than 10";
+			} else {
+				Set<Order> s = orderMap.get(msg.getSenderNickname());
+				Iterator<Order> t = s.iterator();
+				int counter = 0;
+				while (t.hasNext()) {
+					Order order = (Order) t.next();
+					if (!order.isBuyOrder()) {
+						counter++;
+					}
+					if (order.isBuyOrder()){
+						if (o.getNickname().equals(order.getNickname()) && o.getStock().equals(order.getStock())){
+							return "Cannot issue sell order to your own buy order!";
+						}
+					}
+				}
+
+				if (counter < 5) {
+					System.out.println("Client has less than 5 sell orders, adding order.");
+					saveOrder(o);
+					processSell(msg.getOrder());
+				} else {
+					System.out.println("Client already has 5 unfulfilled sell orders");
+					return "You already have 5 unfulfilled sell orders";
+				}
+			}
 		}
+		
+		
 
 		// notify clients of changed order
 		notifyClientsOfChangedOrders();
@@ -259,7 +314,8 @@ public class MicroServer implements MicroTraderServer {
 
 		// reset the set of changed orders
 		updatedOrders = new HashSet<>();
-		return null;
+		
+		return "";
 
 	}
 	
@@ -314,6 +370,8 @@ public class MicroServer implements MicroTraderServer {
 		}
 
 	}
+	
+	
 
 	/**
 	 * Process the transaction between buyer and seller
