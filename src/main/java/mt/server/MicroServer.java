@@ -231,7 +231,7 @@ public class MicroServer implements MicroTraderServer {
 		if (o.isSellOrder()) {
 			processSell(msg.getOrder());
 		}
-
+		//comentario
 		// notify clients of changed order
 		notifyClientsOfChangedOrders();
 
